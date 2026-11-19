@@ -6,15 +6,13 @@ from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
-from openai import OpenAI
+from google import genai
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-deepseek_client = OpenAI(
-    api_key=DEEPSEEK_API_KEY,
-    base_url="https://api.deepseek.com"
-) if DEEPSEEK_API_KEY else None
+# Инициализация клиента Google GenAI
+client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TOKEN)
@@ -23,7 +21,7 @@ dp = Dispatcher(storage=MemoryStorage())
 def get_model_keyboard():
     return types.ReplyKeyboardMarkup(
         keyboard=[
-            [types.KeyboardButton(text="🚀 DeepSeek")],
+            [types.KeyboardButton(text="✨ Gemini Free")],
             [types.KeyboardButton(text="⚙️ Статус системы")]
         ],
         resize_keyboard=True
@@ -31,52 +29,52 @@ def get_model_keyboard():
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
-    await state.update_data(model="DeepSeek")
+    await state.update_data(model="Gemini")
     await message.answer(
-        "Связка запущена! Активная модель: <b>DeepSeek</b>.\n"
+        "Связка с <b>Google Gemini</b> запущена!\n"
         "Отправь любой вопрос в чат для проверки.",
         parse_mode="HTML",
         reply_markup=get_model_keyboard()
     )
 
-@dp.message(F.text == "🚀 DeepSeek")
-async def select_deepseek(message: types.Message, state: FSMContext):
-    await state.update_data(model="DeepSeek")
-    await message.answer("✅ Выбрана модель: <b>DeepSeek</b>", parse_mode="HTML")
+@dp.message(F.text == "✨ Gemini Free")
+async def select_gemini(message: types.Message, state: FSMContext):
+    await state.update_data(model="Gemini")
+    await message.answer("✅ Активная модель: <b>Google Gemini (Free)</b>", parse_mode="HTML")
 
 @dp.message(F.text == "⚙️ Статус системы")
 async def check_status(message: types.Message, state: FSMContext):
     data = await state.get_data()
-    current = data.get("model", "DeepSeek")
+    current = data.get("model", "Gemini")
     status_text = (
         f"Текущая модель: <b>{current}</b>\n"
-        f"Ключ DeepSeek: {'🟢 Подключен' if DEEPSEEK_API_KEY else '🔴 Отсутствует'}"
+        f"Ключ Gemini: {'🟢 Подключен' if GEMINI_API_KEY else '🔴 Отсутствует'}"
     )
     await message.answer(status_text, parse_mode="HTML")
 
 @dp.message(F.text)
 async def handle_message(message: types.Message, state: FSMContext):
-    if not deepseek_client:
-        await message.answer("❌ Ключ DEEPSEEK_API_KEY не найден в настройках Render.")
+    if not client:
+        await message.answer("❌ Ключ GEMINI_API_KEY не найден в настройках Render.")
         return
 
     await bot.send_chat_action(message.chat.id, action="typing")
 
     try:
-        response = deepseek_client.chat.completions.create(
-            model="deepseek-chat",
-            messages=[{"role": "user", "content": message.text}]
+        # Запрос к бесплатной быстрой модели gemini-2.5-flash
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=message.text,
         )
-        answer = response.choices[0].message.content
+        answer = response.text
 
         for i in range(0, len(answer), 4096):
             await message.answer(answer[i:i+4096])
 
     except Exception as e:
-        logging.error(f"Ошибка DeepSeek: {e}")
-        await message.answer(f"⚠️ Ошибка при обращении к DeepSeek:\n<code>{str(e)}</code>", parse_mode="HTML")
+        logging.error(f"Ошибка Gemini: {e}")
+        await message.answer(f"⚠️ Ошибка при обращении к Gemini:\n<code>{str(e)}</code>", parse_mode="HTML")
 
-# Веб-сервер для удержания бесплатного порта Render
 async def handle_web(request):
     return web.Response(text="Bot is running!")
 
@@ -95,4 +93,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
