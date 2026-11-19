@@ -10,6 +10,9 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from openai import OpenAI
 
+# Импортируем параметры из нашего конфига
+from config import AI_MODEL, PORT
+
 sys.stdout.reconfigure(encoding='utf-8')
 sys.stderr.reconfigure(encoding='utf-8')
 
@@ -41,7 +44,6 @@ SYSTEM_INSTRUCTION = load_instruction()
 # Обработчик служебной команды для проверки версии инструкции
 @dp.message(Command("aiminstruction"))
 async def cmd_aiminstruction(message: types.Message):
-    # Извлекаем версию из первой строки файла по тегу
     version_match = re.search(r"\[INSTRUCTION_VERSION:\s*(.*?)\]", SYSTEM_INSTRUCTION)
     version_info = version_match.group(1) if version_match else "Версия не указана"
     
@@ -49,6 +51,7 @@ async def cmd_aiminstruction(message: types.Message):
         f"📋 **Статус инструкции Элизабет:**\n"
         f"• Файл: <code>instruction.txt</code>\n"
         f"• Параметр версии: <b>{version_info}</b>\n"
+        f"• Активная модель (из config.py): <code>{AI_MODEL}</code>\n"
         f"• Статус: Успешно загружена в память бота.",
         parse_mode="HTML"
     )
@@ -59,7 +62,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     
     try:
         response = client.chat.completions.create(
-            model="meta-llama/llama-3.1-8b-instruct:free",
+            model=AI_MODEL,  # Используем модель из конфига
             messages=[
                 {"role": "system", "content": SYSTEM_INSTRUCTION},
                 {"role": "user", "content": "Привет! Я готов начать обучение. Представься и задай первый вопрос диагностики."}
@@ -80,7 +83,7 @@ async def handle_message(message: types.Message, state: FSMContext):
 
     try:
         response = client.chat.completions.create(
-            model="meta-llama/llama-3.1-8b-instruct:free",
+            model=AI_MODEL,  # Используем модель из конфига
             messages=[
                 {"role": "system", "content": SYSTEM_INSTRUCTION},
                 {"role": "user", "content": message.text}
@@ -103,8 +106,8 @@ async def web_server():
     app.router.add_get("/", handle_web)
     runner = web.AppRunner(app)
     await runner.setup()
-    port = int(os.environ.get("PORT", 10000))
-    site = web.TCPSite(runner, "0.0.0.0", port)
+    server_port = int(os.environ.get("PORT", PORT))
+    site = web.TCPSite(runner, "0.0.0.0", server_port)
     await site.start()
 
 async def main():
