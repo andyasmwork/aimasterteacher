@@ -9,17 +9,18 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from openai import OpenAI
 
-# Принудительная установка UTF-8
+# Принудительная установка UTF-8 для логов
 sys.stdout.reconfigure(encoding='utf-8')
 sys.stderr.reconfigure(encoding='utf-8')
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-groq_client = OpenAI(
-    api_key=GROQ_API_KEY,
-    base_url="https://api.groq.com/openai/v1"
-) if GROQ_API_KEY else None
+# Инициализация клиента OpenRouter через стандартный OpenAI SDK
+client = OpenAI(
+    api_key=OPENROUTER_API_KEY,
+    base_url="https://openrouter.ai/api/v1"
+) if OPENROUTER_API_KEY else None
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 bot = Bot(token=TOKEN)
@@ -28,7 +29,7 @@ dp = Dispatcher(storage=MemoryStorage())
 def get_model_keyboard():
     return types.ReplyKeyboardMarkup(
         keyboard=[
-            [types.KeyboardButton(text="Llama 3 (Groq)")],
+            [types.KeyboardButton(text="Free AI (OpenRouter)")],
             [types.KeyboardButton(text="Status")]
         ],
         resize_keyboard=True
@@ -36,33 +37,34 @@ def get_model_keyboard():
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
-    await state.update_data(model="Groq")
+    await state.update_data(model="OpenRouter")
     await message.answer(
-        "Bot connected to Groq successfully!\nSend any message to test.",
+        "Bot connected to OpenRouter successfully!\nSend any message to test.",
         reply_markup=get_model_keyboard()
     )
 
-@dp.message(F.text == "Llama 3 (Groq)")
-async def select_groq(message: types.Message, state: FSMContext):
-    await state.update_data(model="Groq")
-    await message.answer("Active model: Llama 3 (Groq)")
+@dp.message(F.text == "Free AI (OpenRouter)")
+async def select_model(message: types.Message, state: FSMContext):
+    await state.update_data(model="OpenRouter")
+    await message.answer("Active model: Free AI (OpenRouter)")
 
 @dp.message(F.text == "Status")
 async def check_status(message: types.Message, state: FSMContext):
-    key_status = "Connected" if GROQ_API_KEY else "Missing"
-    await message.answer(f"Groq API Key status: {key_status}")
+    key_status = "Connected" if OPENROUTER_API_KEY else "Missing"
+    await message.answer(f"OpenRouter API Key status: {key_status}")
 
 @dp.message(F.text)
 async def handle_message(message: types.Message, state: FSMContext):
-    if not groq_client:
-        await message.answer("Error: GROQ_API_KEY is not set in Render.")
+    if not client:
+        await message.answer("Error: OPENROUTER_API_KEY is not set in Render.")
         return
 
     await bot.send_chat_action(message.chat.id, action="typing")
 
     try:
-        response = groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+        # Запрос к бесплатной модели через OpenRouter
+        response = client.chat.completions.create(
+            model="google/gemma-2-9b-it:free",
             messages=[{"role": "user", "content": message.text}]
         )
         answer = response.choices[0].message.content
@@ -71,8 +73,8 @@ async def handle_message(message: types.Message, state: FSMContext):
             await message.answer(answer[i:i+4096])
 
     except Exception as e:
-        err_msg = str(e).encode('ascii', 'ignore').decode('ascii')
-        await message.answer(f"API Error occurred: {err_msg}")
+        error_text = str(e).encode('ascii', 'ignore').decode('ascii')
+        await message.answer(f"API Error: {error_text[:200]}")
 
 async def handle_web(request):
     return web.Response(text="Bot is running!")
