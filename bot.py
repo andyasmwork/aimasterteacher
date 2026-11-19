@@ -1,6 +1,7 @@
 import os
 import asyncio
 import logging
+import sys
 from aiohttp import web
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
@@ -8,10 +9,13 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from openai import OpenAI
 
+# Принудительно устанавливаем UTF-8 кодировку для вывода
+sys.stdout.reconfigure(encoding='utf-8')
+sys.stderr.reconfigure(encoding='utf-8')
+
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-# Инициализация клиента Groq с базовым URL Groq API
 groq_client = OpenAI(
     api_key=GROQ_API_KEY,
     base_url="https://api.groq.com/openai/v1"
@@ -34,7 +38,7 @@ def get_model_keyboard():
 async def cmd_start(message: types.Message, state: FSMContext):
     await state.update_data(model="Groq Llama 3")
     await message.answer(
-        "Связка с <b>Groq (Llama 3)</b> запущена!\n"
+        "Связка с <b>Groq</b> запущена!\n"
         "Отправь любой вопрос в чат для проверки.",
         parse_mode="HTML",
         reply_markup=get_model_keyboard()
@@ -64,9 +68,8 @@ async def handle_message(message: types.Message, state: FSMContext):
     await bot.send_chat_action(message.chat.id, action="typing")
 
     try:
-        # Запрос к быстрой и бесплатной модели llama-3.3-70b-versatile (или llama3-8b)
         response = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": message.text}]
         )
         answer = response.choices[0].message.content
