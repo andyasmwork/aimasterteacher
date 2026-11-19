@@ -9,3 +9,4 @@ SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 SMTP_USER = "ai.work.andrei@gmail.com"       # Ваш email
 SMTP_PASSWORD = "K7vcoummu#"      # Пароль приложения (App Password)
+PORT = 10000
