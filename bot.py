@@ -64,7 +64,7 @@ async def handle_message(message: types.Message, state: FSMContext):
     try:
         # Запрос к бесплатной модели через OpenRouter
         response = client.chat.completions.create(
-            model="google/gemma-2-9b-it:free",
+            model="deepseek/deepseek-chat:free",
             messages=[{"role": "user", "content": message.text}]
         )
         answer = response.choices[0].message.content
