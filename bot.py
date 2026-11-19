@@ -64,7 +64,7 @@ async def handle_message(message: types.Message, state: FSMContext):
     try:
         # Запрос к бесплатной модели через OpenRouter
         response = client.chat.completions.create(
-            model="meta-llama/llama-3.1-8b-instruct:free",
+            model="meta-llama/llama-3.1-8b-instruct",
             messages=[{"role": "user", "content": message.text}]
         )
         answer = response.choices[0].message.content
