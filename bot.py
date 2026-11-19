@@ -3,10 +3,6 @@ import asyncio
 import logging
 import sys
 import re
-import random
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 
 from aiohttp import web
 from aiogram import Bot, Dispatcher, F, types
@@ -16,7 +12,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from openai import OpenAI
 
-from config import AI_MODEL, PORT, SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD
+from config import AI_MODEL, PORT
 from database import get_student, save_student_field, add_progress_record
 
 sys.stdout.reconfigure(encoding='utf-8')
@@ -34,12 +30,10 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-# Определяем состояния регистрации (FSM)
 class RegistrationStates(StatesGroup):
     waiting_for_name = State()
     waiting_for_phone = State()
     waiting_for_email = State()
-    waiting_for_code = State()
 
 def load_instruction():
     filename = "instruction.txt"
@@ -52,31 +46,6 @@ def load_instruction():
     return "Ты — Элизабет 3.0, персональный наставник по искусственному интеллекту."
 
 SYSTEM_INSTRUCTION = load_instruction()
-
-def send_email_code(to_email, code):
-    """Отправка кода подтверждения на email через SMTP"""
-    if not SMTP_USER or not SMTP_PASSWORD:
-        logging.warning("SMTP credentials not set. Code simulation: " + str(code))
-        return True # Для теста без настроенной почты
-    
-    try:
-        msg = MIMEMultipart()
-        msg['From'] = SMTP_USER
-        msg['To'] = to_email
-        msg['Subject'] = "Подтверждение регистрации | Элизабет 3.0"
-        
-        body = f"Здравствуйте!\n\nВаш код подтверждения для доступа к обучению: {code}\n\nЕсли вы не запрашивали этот код, просто проигнорируйте письмо."
-        msg.attach(MIMEText(body, 'plain'))
-        
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-        server.starttls()
-        server.login(SMTP_USER, SMTP_PASSWORD)
-        server.sendmail(SMTP_USER, to_email, msg.as_string())
-        server.quit()
-        return True
-    except Exception as e:
-        logging.error(f"SMTP Error: {e}")
-        return False
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
@@ -103,7 +72,7 @@ async def process_name(message: types.Message, state: FSMContext):
 async def process_phone(message: types.Message, state: FSMContext):
     save_student_field(message.from_user.id, "phone", message.text.strip())
     await state.set_state(RegistrationStates.waiting_for_email)
-    await message.answer("Принято! Теперь укажи свой действующий **Email** (на него придет код подтверждения):")
+    await message.answer("Принято! Теперь укажи свой **Email**:")
 
 @dp.message(RegistrationStates.waiting_for_email)
 async def process_email(message: types.Message, state: FSMContext):
@@ -112,53 +81,24 @@ async def process_email(message: types.Message, state: FSMContext):
         await message.answer("⚠️ Похоже, это некорректный email. Пожалуйста, введи действующий адрес:")
         return
     
-    code = str(random.randint(100000, 999999))
     save_student_field(message.from_user.id, "email", email)
-    save_student_field(message.from_user.id, "verification_code", code)
+    save_student_field(message.from_user.id, "email_verified", True)
+    await state.clear()
     
-    success = send_email_code(email, code)
-    
-    if success:
-        await state.set_state(RegistrationStates.waiting_for_code)
-        await message.answer(
-            f"📨 Мы отправили 6-значный код подтверждения на почту: <code>{email}</code>\n\n"
-            "Пожалуйста, проверьте входящие сообщения.\n"
-            "⚠️ <i>Если письма нет долго, обязательно проверьте папку **«Спам»** или **«Нежелательная почта»**!</i>\n\n"
-            "Введите полученный код:",
-            parse_mode="HTML"
-        )
-    else:
-        await message.answer("⚠️ Не удалось отправить письмо на этот адрес. Пожалуйста, проверьте правильность и введите email еще раз:")
+    await message.answer(
+        "✅ **Регистрация успешно завершена!** Контактные данные сохранены.\n\n"
+        "Давайте начнем с первого этапа: **«Фундамент искусственного интеллекта»**.\n"
+        "Напишите любое сообщение, чтобы приступить к обучению!",
+        parse_mode="HTML"
+    )
 
-@dp.message(RegistrationStates.waiting_for_code)
-async def process_code(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    student = get_student(user_id)
-    user_code = message.text.strip()
-    
-    if student and user_code == str(student.get("verification_code")):
-        save_student_field(user_id, "email_verified", True)
-        await state.clear()
-        await message.answer(
-            "✅ **Почта успешно подтверждена!** Регистрация завершена.\n\n"
-            "Теперь вы можете полноценно приступить к программе обучения. Отправьте любое сообщение, чтобы начать первое занятие!",
-            parse_mode="HTML"
-        )
-    else:
-        await message.answer(
-            "❌ Неверный код подтверждения.\n"
-            "Пожалуйста, проверьте почту (включая папку **Спам**) и введите правильный код еще раз:"
-        )
-
-# Основной обработчик сообщений для зарегистрированных учеников
 @dp.message(F.text)
 async def handle_message(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     student = get_student(user_id)
     
-    # Если ученик не зарегистрирован или не подтвердил email — блокируем доступ дальше
     if not student or not student.get("email_verified"):
-        await message.answer("⚠️ Пожалуйста, завершите регистрацию и подтвердите вашу почту, прежде чем продолжать обучение. Введите /start")
+        await message.answer("⚠️ Пожалуйста, пройдите регистрацию. Введите /start")
         return
 
     if not client:
